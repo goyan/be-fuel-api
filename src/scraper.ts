@@ -4,7 +4,7 @@ import { FUEL_LABELS } from './types.js'
 import { fetchWithTimeout } from './fetch.js'
 import { getCached, setCached } from './cache.js'
 
-const BASE_URL = process.env.CARBU_BASE_URL || 'https://carbu.com/belgique'
+const BASE_URL = 'https://carbu.com/belgique'
 const LOCATION_API = 'https://carbu.com/commonFunctions/getlocation/controller.getlocation_JSON.php'
 
 const HEADERS = {
@@ -49,6 +49,9 @@ async function resolveLocationCode(town: string): Promise<string> {
   }
 
   const code = results[0].ac
+  if (!/^BE_[a-z]{2}_\d+$/i.test(code)) {
+    throw new Error(`Invalid location code from carbu.com: ${code}`)
+  }
   setCached(cacheKey, code)
   return code
 }

@@ -1,6 +1,8 @@
 import 'dotenv/config'
+import { timingSafeEqual } from 'crypto'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import rateLimit from '@fastify/rate-limit'
 import type { FuelType, GasPriceFuelType, GasPriceStation } from './types.js'
 import { FUEL_LABELS, GP_TO_BE_FUEL, BELGIAN_BOUNDS, VALID_GP_FUELS, VALID_RADII } from './types.js'
 
@@ -16,6 +18,8 @@ const port = parseInt(process.env.PORT || '3001', 10)
 const logLevel = process.env.LOG_LEVEL || 'info'
 
 const app = Fastify({ logger: { level: logLevel } })
+
+await app.register(rateLimit, { max: 60, timeWindow: '1 minute' })
 
 await app.register(cors, {
   origin: [
@@ -40,9 +44,11 @@ interface CachedStations {
 
 app.addHook('onRequest', async (request, reply) => {
   if (request.url.startsWith('/health')) return
+  if (!API_KEY) return
 
   const key = request.headers['x-api-key']
-  if (API_KEY && key !== API_KEY) {
+  if (typeof key !== 'string' || key.length !== API_KEY.length ||
+      !timingSafeEqual(Buffer.from(key), Buffer.from(API_KEY))) {
     return reply.status(401).send({ error: 'Invalid or missing API key' })
   }
 })
@@ -60,6 +66,10 @@ app.get<{
 
   if (!fuel || !postal || !town) {
     return reply.status(400).send({ error: 'Missing required params: fuel, postal, town' })
+  }
+
+  if (town.length > 100) {
+    return reply.status(400).send({ error: 'Town name too long (max 100 chars)' })
   }
 
   if (!VALID_FUELS.has(fuel)) {
