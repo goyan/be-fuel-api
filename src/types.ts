@@ -14,6 +14,7 @@ export interface BEStation {
     sp98: number | null
     lpg: number | null
     e85: number | null
+    ev: number | null
   }
   updatedAt: string
   pricesUpdatedAt?: Record<FuelType, string | null>
@@ -40,9 +41,9 @@ export interface OfficialPrices {
   }
 }
 
-export type FuelType = 'diesel' | 'sp95' | 'sp98' | 'lpg' | 'e85'
+export type FuelType = 'diesel' | 'sp95' | 'sp98' | 'lpg' | 'e85' | 'ev'
 
-export type GasPriceFuelType = 'gazole' | 'sp95' | 'sp98' | 'e10' | 'e85' | 'gplc'
+export type GasPriceFuelType = 'gazole' | 'sp95' | 'sp98' | 'e10' | 'e85' | 'gplc' | 'ev'
 
 /** Map gasPrice fuel type → BE fuel type */
 export const GP_TO_BE_FUEL: Record<GasPriceFuelType, FuelType> = {
@@ -52,6 +53,7 @@ export const GP_TO_BE_FUEL: Record<GasPriceFuelType, FuelType> = {
   sp98: 'sp98',
   gplc: 'lpg',
   e85: 'e85',
+  ev: 'ev',
 }
 
 /** Map BE fuel type → gasPrice fuel type */
@@ -61,6 +63,7 @@ export const BE_TO_GP_FUEL: Record<FuelType, GasPriceFuelType> = {
   sp98: 'sp98',
   lpg: 'gplc',
   e85: 'e85',
+  ev: 'ev',
 }
 
 export interface GasPriceStation {
@@ -83,6 +86,8 @@ export interface GasPriceStation {
   e85_maj: string | null
   gplc_prix: number | null
   gplc_maj: string | null
+  ev_prix: number | null
+  ev_maj: string | null
   carburants_disponibles: string[]
   services_service: string[]
   horaires_automate_24_24: string
@@ -94,7 +99,7 @@ export const BELGIAN_BOUNDS = {
   lng: { min: 1.8, max: 7.0 },
 } as const
 
-export const VALID_GP_FUELS = new Set<GasPriceFuelType>(['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc'])
+export const VALID_GP_FUELS = new Set<GasPriceFuelType>(['gazole', 'sp95', 'sp98', 'e10', 'e85', 'gplc', 'ev'])
 
 export const FUEL_LABELS: Record<FuelType, string> = {
   diesel: 'Diesel%20(B7)',
@@ -102,6 +107,7 @@ export const FUEL_LABELS: Record<FuelType, string> = {
   sp98: 'Super%2098%20(E5)',
   lpg: 'LPG',
   e85: 'Super%20E85',
+  ev: 'Electrique',
 }
 
 /** Radii accepted by the API — carbu.com returns ~10km, we filter by haversine */

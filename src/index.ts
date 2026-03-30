@@ -192,7 +192,7 @@ app.get<{
         for (const station of stations) {
           const existing = stationMap.get(station.id)
           if (existing) {
-            const ep = existing.pricesUpdatedAt ?? { diesel: null, sp95: null, sp98: null, lpg: null, e85: null }
+            const ep = existing.pricesUpdatedAt ?? { diesel: null, sp95: null, sp98: null, lpg: null, e85: null, ev: null }
             for (const f of ALL_FUEL_KEYS) {
               if (station.prices[f] !== null) {
                 existing.prices[f] = station.prices[f]
@@ -201,7 +201,7 @@ app.get<{
             }
             existing.pricesUpdatedAt = ep
           } else {
-            const pua = { diesel: null, sp95: null, sp98: null, lpg: null, e85: null } as Record<FuelType, string | null>
+            const pua = { diesel: null, sp95: null, sp98: null, lpg: null, e85: null, ev: null } as Record<FuelType, string | null>
             for (const f of ALL_FUEL_KEYS) {
               if (station.prices[f] !== null) pua[f] = station.updatedAt
             }

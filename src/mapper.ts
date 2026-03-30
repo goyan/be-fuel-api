@@ -6,7 +6,7 @@ export function mapToGasPriceStation(station: BEStation): GasPriceStation {
 
   const { prices, updatedAt, pricesUpdatedAt: pua } = station
 
-  const datFor = (fuel: 'diesel' | 'sp95' | 'sp98' | 'lpg' | 'e85'): string | null =>
+  const datFor = (fuel: 'diesel' | 'sp95' | 'sp98' | 'lpg' | 'e85' | 'ev'): string | null =>
     prices[fuel] !== null ? (pua?.[fuel] ?? updatedAt) : null
 
   const sp95Maj = datFor('sp95')
@@ -17,6 +17,7 @@ export function mapToGasPriceStation(station: BEStation): GasPriceStation {
   if (prices.sp98 !== null) carburants_disponibles.push('SP98')
   if (prices.lpg !== null) carburants_disponibles.push('GPLc')
   if (prices.e85 !== null) carburants_disponibles.push('E85')
+  if (prices.ev !== null) carburants_disponibles.push('Electrique')
 
   return {
     id: station.id,
@@ -38,6 +39,8 @@ export function mapToGasPriceStation(station: BEStation): GasPriceStation {
     e85_maj: datFor('e85'),
     gplc_prix: prices.lpg,
     gplc_maj: datFor('lpg'),
+    ev_prix: prices.ev,
+    ev_maj: datFor('ev'),
     carburants_disponibles,
     services_service: [],
     horaires_automate_24_24: '',

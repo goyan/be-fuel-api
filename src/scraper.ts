@@ -109,6 +109,7 @@ export function parseStationsHtml(html: string, fuel: FuelType, postal: string):
       sp98: null as number | null,
       lpg: null as number | null,
       e85: null as number | null,
+      ev: null as number | null,
     }
     if (price !== null && !isNaN(price)) {
       prices[fuel] = price
