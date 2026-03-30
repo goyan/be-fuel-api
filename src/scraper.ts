@@ -1,9 +1,11 @@
 import * as cheerio from 'cheerio'
 import type { BEStation, FuelType } from './types.js'
-import { FUEL_LABELS, RADIUS_CODES } from './types.js'
+import { FUEL_LABELS } from './types.js'
+import { fetchWithTimeout } from './fetch.js'
+import { getCached, setCached } from './cache.js'
 
 const BASE_URL = process.env.CARBU_BASE_URL || 'https://carbu.com/belgique'
-const FETCH_TIMEOUT = 8000
+const LOCATION_API = 'https://carbu.com/commonFunctions/getlocation/controller.getlocation_JSON.php'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -12,44 +14,64 @@ const HEADERS = {
   'Referer': 'https://carbu.com/belgique/',
 }
 
-function buildUrl(fuel: FuelType, town: string, postal: string, radius: number): string {
-  const fuelLabel = FUEL_LABELS[fuel]
-  const radiusCode = RADIUS_CODES[radius] || RADIUS_CODES[10]
-  return `${BASE_URL}/index.php/liste-stations-service/${fuelLabel}/${encodeURIComponent(town)}/${postal}/${radiusCode}`
+/** Resolve a town name to a carbu.com location code (BE_ht_XXXX) */
+async function resolveLocationCode(town: string): Promise<string> {
+  const cacheKey = `loc_${town}`
+  const cached = getCached<string>(cacheKey)
+  if (cached) return cached
+
+  const params = new URLSearchParams({
+    location: town,
+    page_limit: '1',
+    minLevel: '5',
+    maxLevel: '6',
+    SHRT: '1',
+    GPSCoordRequired: 'true',
+    country: 'BE',
+    L: 'fr',
+    callback: 'x',
+  })
+
+  const res = await fetchWithTimeout(`${LOCATION_API}?${params}`, {
+    headers: { 'User-Agent': HEADERS['User-Agent'] },
+  })
+  if (!res.ok) {
+    throw new Error(`carbu.com location API responded with ${res.status}`)
+  }
+
+  const text = await res.text()
+  // Response is JSONP: x([{...}]);
+  const json = text.replace(/^x\(/, '').replace(/\);?\s*$/, '')
+  const results = JSON.parse(json) as Array<{ ac: string }>
+
+  if (results.length === 0) {
+    throw new Error(`No carbu.com location found for "${town}"`)
+  }
+
+  const code = results[0].ac
+  setCached(cacheKey, code)
+  return code
 }
 
-/**
- * Scrape carbu.com station list page.
- *
- * HTML structure (observed 2026-03):
- * - Station rows are in a table or repeated div blocks
- * - Each row contains: station name, brand, address, price, last update
- * - Selectors may change — keep this function focused and easy to update
- */
+function buildUrl(fuel: FuelType, town: string, locationCode: string): string {
+  const fuelLabel = FUEL_LABELS[fuel]
+  return `${BASE_URL}/index.php/liste-stations-service/${fuelLabel}/${encodeURIComponent(town)}/0/${locationCode}`
+}
+
 export async function scrapeStations(
   fuel: FuelType,
   town: string,
   postal: string,
-  radius: number,
+  _radius: number,
 ): Promise<BEStation[]> {
-  const url = buildUrl(fuel, town, postal, radius)
+  const locationCode = await resolveLocationCode(town)
+  const url = buildUrl(fuel, town, locationCode)
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT)
-
-  let html: string
-  try {
-    const res = await fetch(url, {
-      headers: HEADERS,
-      signal: controller.signal,
-    })
-    if (!res.ok) {
-      throw new Error(`carbu.com responded with ${res.status}`)
-    }
-    html = await res.text()
-  } finally {
-    clearTimeout(timeout)
+  const res = await fetchWithTimeout(url, { headers: HEADERS })
+  if (!res.ok) {
+    throw new Error(`carbu.com responded with ${res.status}`)
   }
+  const html = await res.text()
 
   return parseStationsHtml(html, fuel, postal)
 }
@@ -58,24 +80,26 @@ export function parseStationsHtml(html: string, fuel: FuelType, postal: string):
   const $ = cheerio.load(html)
   const stations: BEStation[] = []
 
-  // carbu.com uses .station-content blocks for each station entry
-  // Each block contains the station info in structured divs
-  // TODO: Verify selectors against live HTML — they may evolve
-  $('.station-content, tr[data-station-id]').each((i, el) => {
+  $('.stationItem').each((i, el) => {
     const $el = $(el)
 
-    const stationId = $el.attr('data-station-id') || `BE_${postal}_${i}`
-    const name = $el.find('.station-name, .name').first().text().trim()
-    const brand = $el.find('.station-brand, .brand').first().text().trim()
-    const address = $el.find('.station-address, .address').first().text().trim()
-    const city = $el.find('.station-city, .city').first().text().trim() || ''
-    const priceText = $el.find('.station-price, .price').first().text().trim()
-    const dateText = $el.find('.station-date, .date-update').first().text().trim()
+    const stationId = $el.attr('data-id') || `BE_${postal}_${i}`
+    const name = $el.attr('data-name') || `Station ${i + 1}`
+    const brand = $el.find('.station-logo img').attr('alt') || ''
 
-    const latStr = $el.attr('data-lat') || $el.find('[data-lat]').attr('data-lat')
-    const lngStr = $el.attr('data-lng') || $el.find('[data-lng]').attr('data-lng')
+    const rawAddress = $el.attr('data-address') || ''
+    const addressParts = rawAddress.split(/<br\/>/i)
+    const street = addressParts[0]?.trim() || ''
+    const postalCity = addressParts[1]?.trim() || ''
+    const postalCodeMatch = postalCity.match(/^(\d{4})\s*(.*)$/)
+    const stationPostal = postalCodeMatch ? postalCodeMatch[1] : postal
+    const city = postalCodeMatch ? postalCodeMatch[2].trim() : postalCity
 
-    const price = parsePrice(priceText)
+    const latStr = $el.attr('data-lat') || ''
+    const lngStr = $el.attr('data-lng') || ''
+
+    const priceStr = $el.attr('data-price') || ''
+    const price = priceStr ? parseFloat(priceStr) : null
     const prices = {
       diesel: null as number | null,
       sp95: null as number | null,
@@ -83,20 +107,22 @@ export function parseStationsHtml(html: string, fuel: FuelType, postal: string):
       lpg: null as number | null,
       e85: null as number | null,
     }
-    if (price !== null) {
+    if (price !== null && !isNaN(price)) {
       prices[fuel] = price
     }
 
+    const dateText = $el.find('span').filter((_, span) => /\d{2}\/\d{2}\/\d{2}/.test($(span).text())).first().text().trim()
+
     stations.push({
       id: stationId,
-      name: name || `Station ${i + 1}`,
-      brand: brand || '',
-      address,
+      name,
+      brand,
+      address: street,
       city,
-      postalCode: postal,
+      postalCode: stationPostal,
       country: 'BE',
-      lat: latStr ? parseFloat(latStr) : null,
-      lng: lngStr ? parseFloat(lngStr) : null,
+      lat: latStr ? parseFloat(latStr) || null : null,
+      lng: lngStr ? parseFloat(lngStr) || null : null,
       prices,
       updatedAt: parseDateText(dateText),
     })
@@ -105,18 +131,11 @@ export function parseStationsHtml(html: string, fuel: FuelType, postal: string):
   return stations
 }
 
-function parsePrice(text: string): number | null {
-  // Prices on carbu.com are like "1.789 €/l" or "1,789"
-  const cleaned = text.replace(',', '.').replace(/[^\d.]/g, '')
-  const num = parseFloat(cleaned)
-  return isNaN(num) ? null : num
-}
-
 function parseDateText(text: string): string {
-  // Try to extract a date from text like "Mis à jour le 30/03/2026"
-  const match = text.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+  const match = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/)
   if (match) {
-    return `${match[3]}-${match[2]}-${match[1]}T00:00:00.000Z`
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3]
+    return `${year}-${match[2]}-${match[1]}T00:00:00.000Z`
   }
   return new Date().toISOString()
 }
