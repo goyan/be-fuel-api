@@ -115,6 +115,7 @@ function buildApp() {
               sp98: existing.prices.sp98 ?? station.prices.sp98,
               lpg: existing.prices.lpg ?? station.prices.lpg,
               e85: existing.prices.e85 ?? station.prices.e85,
+              ev: existing.prices.ev ?? station.prices.ev,
             }
           } else {
             stationMap.set(station.id, { ...station })
@@ -192,7 +193,7 @@ describe('API routes', () => {
           country: 'BE',
           lat: 50.7453,
           lng: 3.2097,
-          prices: { diesel: 1.789, sp95: null, sp98: null, lpg: null, e85: null },
+          prices: { diesel: 1.789, sp95: null, sp98: null, lpg: null, e85: null, ev: null },
           updatedAt: '2026-03-30T00:00:00.000Z',
         },
       ]
@@ -262,7 +263,7 @@ describe('API routes', () => {
         country: 'BE',
         lat: 50.85,
         lng: 4.35,
-        prices: { diesel: 1.799, sp95: 1.699, sp98: 1.759, lpg: null, e85: null },
+        prices: { diesel: 1.799, sp95: 1.699, sp98: 1.759, lpg: null, e85: null, ev: null },
         updatedAt: '2026-03-30T00:00:00.000Z',
       }
 
@@ -291,10 +292,45 @@ describe('API routes', () => {
       expect(station).toHaveProperty('gazole_prix', 1.799)
       expect(station).toHaveProperty('e10_prix', 1.699)
       expect(station).toHaveProperty('sp95_prix', 1.699)
+      expect(station).toHaveProperty('ev_prix', null)
+      expect(station).toHaveProperty('ev_maj', null)
       expect(station).toHaveProperty('services_service')
       expect(Array.isArray(station.services_service)).toBe(true)
       expect(station).toHaveProperty('carburants_disponibles')
       expect(Array.isArray(station.carburants_disponibles)).toBe(true)
+    })
+
+    it('returns EV stations with ev fuel type', async () => {
+      const evStation: BEStation = {
+        id: 'BE_EV_001',
+        name: 'Q8 Easy Bruxelles',
+        brand: 'Q8',
+        address: 'Rue du Midi 10',
+        city: 'Bruxelles',
+        postalCode: '1000',
+        country: 'BE',
+        lat: 50.845,
+        lng: 4.352,
+        prices: { diesel: null, sp95: null, sp98: null, lpg: null, e85: null, ev: 0.45 },
+        updatedAt: '2026-03-30T00:00:00.000Z',
+      }
+
+      vi.mocked(reverseGeocode).mockResolvedValue({ postalCode: '1000', town: 'Bruxelles' })
+      vi.mocked(scrapeStations).mockResolvedValue([evStation])
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/stations/geo?lat=50.845&lng=4.352&fuels=ev',
+      })
+
+      expect(res.statusCode).toBe(200)
+      const body = res.json()
+      expect(body.results).toHaveLength(1)
+      const station = body.results[0]
+      expect(station.ev_prix).toBe(0.45)
+      expect(station.ev_maj).toBe('2026-03-30T00:00:00.000Z')
+      expect(station.gazole_prix).toBeNull()
+      expect(station.carburants_disponibles).toContain('Electrique')
     })
 
     it('deduplicates stations when same id returned by multiple fuel queries', async () => {
@@ -308,12 +344,12 @@ describe('API routes', () => {
         country: 'BE',
         lat: 50.64,
         lng: 5.57,
-        prices: { diesel: 1.75, sp95: null, sp98: null, lpg: null, e85: null },
+        prices: { diesel: 1.75, sp95: null, sp98: null, lpg: null, e85: null, ev: null },
         updatedAt: '2026-03-30T00:00:00.000Z',
       }
       const sp95Station: BEStation = {
         ...dieselStation,
-        prices: { diesel: null, sp95: 1.65, sp98: null, lpg: null, e85: null },
+        prices: { diesel: null, sp95: 1.65, sp98: null, lpg: null, e85: null, ev: null },
       }
 
       vi.mocked(reverseGeocode).mockResolvedValue({ postalCode: '4000', town: 'Liège' })
