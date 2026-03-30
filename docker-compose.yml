@@ -1,0 +1,18 @@
+version: "3.8"
+services:
+  be-fuel-api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.be-fuel.rule=Host(`be-fuel.goyan.fr`)"
+      - "traefik.http.routers.be-fuel.entrypoints=websecure"
+      - "traefik.http.routers.be-fuel.tls.certresolver=letsencrypt"
+      - "traefik.http.services.be-fuel.loadbalancer.server.port=3001"
+
+networks:
+  traefik_proxy:
+    external: true
