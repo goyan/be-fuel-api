@@ -16,12 +16,14 @@ const HEADERS = {
 
 /** Resolve a town name to a carbu.com location code (BE_ht_XXXX) */
 async function resolveLocationCode(town: string): Promise<string> {
-  const cacheKey = `loc_${town}`
+  // Belgian cities can be bilingual (e.g. "Bruxelles - Brussel"), use first part
+  const cleanTown = town.includes(' - ') ? town.split(' - ')[0].trim() : town
+  const cacheKey = `loc_${cleanTown}`
   const cached = getCached<string>(cacheKey)
   if (cached) return cached
 
   const params = new URLSearchParams({
-    location: town,
+    location: cleanTown,
     page_limit: '1',
     minLevel: '5',
     maxLevel: '6',

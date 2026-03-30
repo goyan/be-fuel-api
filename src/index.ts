@@ -25,7 +25,7 @@ await app.register(cors, {
   origin: [
     'https://gasprice.vercel.app',
     'http://localhost:5173',
-    /https:\/\/.*\.vercel\.app$/,
+    /https:\/\/gasprice(-\w+)?\.vercel\.app$/,
   ],
 })
 
